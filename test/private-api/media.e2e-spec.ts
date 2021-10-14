@@ -3,88 +3,47 @@
  *
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { NestExpressApplication } from '@nestjs/platform-express';
-import { Test } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import request from 'supertest';
 
-import { PrivateApiModule } from '../../src/api/private/private-api.module';
-import { AuthModule } from '../../src/auth/auth.module';
 import { AuthConfig } from '../../src/config/auth.config';
-import appConfigMock from '../../src/config/mock/app.config.mock';
-import authConfigMock from '../../src/config/mock/auth.config.mock';
-import customizationConfigMock from '../../src/config/mock/customization.config.mock';
-import externalConfigMock from '../../src/config/mock/external-services.config.mock';
-import mediaConfigMock from '../../src/config/mock/media.config.mock';
-import { GroupsModule } from '../../src/groups/groups.module';
-import { IdentityService } from '../../src/identity/identity.service';
 import { ConsoleLoggerService } from '../../src/logger/console-logger.service';
-import { LoggerModule } from '../../src/logger/logger.module';
-import { MediaModule } from '../../src/media/media.module';
-import { NotesModule } from '../../src/notes/notes.module';
-import { NotesService } from '../../src/notes/notes.service';
-import { PermissionsModule } from '../../src/permissions/permissions.module';
-import { UsersService } from '../../src/users/users.service';
 import { setupSessionMiddleware } from '../../src/utils/session';
+import { TestSetup } from '../test-setup';
 import { ensureDeleted } from '../utils';
 
 describe('Media', () => {
-  let identityService: IdentityService;
-  let app: NestExpressApplication;
+  let testSetup: TestSetup;
+
   let uploadPath: string;
   let agent: request.SuperAgentTest;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({
-          isGlobal: true,
-          load: [
-            mediaConfigMock,
-            appConfigMock,
-            authConfigMock,
-            customizationConfigMock,
-            externalConfigMock,
-          ],
-        }),
-        PrivateApiModule,
-        MediaModule,
-        TypeOrmModule.forRoot({
-          type: 'sqlite',
-          database: './hedgedoc-e2e-private-media.sqlite',
-          autoLoadEntities: true,
-          dropSchema: true,
-          synchronize: true,
-        }),
-        NotesModule,
-        PermissionsModule,
-        GroupsModule,
-        LoggerModule,
-        AuthModule,
-      ],
-    }).compile();
-    const config = moduleRef.get<ConfigService>(ConfigService);
-    uploadPath = config.get('mediaConfig').backend.filesystem.uploadPath;
-    app = moduleRef.createNestApplication<NestExpressApplication>();
-    app.useStaticAssets(uploadPath, {
+    testSetup = await TestSetup.create();
+
+    uploadPath =
+      testSetup.configService.get('mediaConfig').backend.filesystem.uploadPath;
+
+    testSetup.app.useStaticAssets(uploadPath, {
       prefix: '/uploads',
     });
-    const authConfig = config.get('authConfig') as AuthConfig;
-    setupSessionMiddleware(app, authConfig);
-    await app.init();
-    const logger = await app.resolve(ConsoleLoggerService);
+    const authConfig = testSetup.configService.get('authConfig') as AuthConfig;
+    setupSessionMiddleware(testSetup.app, authConfig);
+    await testSetup.app.init();
+
+    const logger = await testSetup.app.resolve(ConsoleLoggerService);
     logger.log('Switching logger', 'AppBootstrap');
-    app.useLogger(logger);
-    identityService = moduleRef.get(IdentityService);
-    const notesService: NotesService = moduleRef.get(NotesService);
-    await notesService.createNote('test content', 'test_upload_media');
-    const userService: UsersService = moduleRef.get(UsersService);
-    const user = await userService.createUser('hardcoded', 'Testy');
-    await identityService.createLocalIdentity(user, 'test');
-    agent = request.agent(app.getHttpServer());
+    testSetup.app.useLogger(logger);
+
+    await testSetup.notesService.createNote(
+      'test content',
+      'test_upload_media',
+    );
+    const user = await testSetup.userService.createUser('hardcoded', 'Testy');
+    await testSetup.identityService.createLocalIdentity(user, 'test');
+
+    agent = request.agent(testSetup.app.getHttpServer());
     await agent
       .post('/auth/local/login')
       .send({ username: 'hardcoded', password: 'test' })
@@ -148,6 +107,6 @@ describe('Media', () => {
   afterAll(async () => {
     // Delete the upload folder
     await ensureDeleted(uploadPath);
-    await app.close();
+    await testSetup.app.close();
   });
 });
