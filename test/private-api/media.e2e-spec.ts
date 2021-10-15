@@ -45,7 +45,7 @@ describe('Media', () => {
 
     agent = request.agent(testSetup.app.getHttpServer());
     await agent
-      .post('/auth/local/login')
+      .post('/api/private/auth/local/login')
       .send({ username: 'hardcoded', password: 'test' })
       .expect(201);
   });
@@ -53,7 +53,7 @@ describe('Media', () => {
   describe('POST /media', () => {
     it('works', async () => {
       const uploadResponse = await agent
-        .post('/media')
+        .post('/api/private/media')
         .attach('file', 'test/private-api/fixtures/test.png')
         .set('HedgeDoc-Note', 'test_upload_media')
         .expect('Content-Type', /json/)
@@ -73,7 +73,7 @@ describe('Media', () => {
       });
       it('MIME type not supported', async () => {
         await agent
-          .post('/media')
+          .post('/api/private/media')
           .attach('file', 'test/private-api/fixtures/test.zip')
           .set('HedgeDoc-Note', 'test_upload_media')
           .expect(400);
@@ -81,7 +81,7 @@ describe('Media', () => {
       });
       it('note does not exist', async () => {
         await agent
-          .post('/media')
+          .post('/api/private/media')
           .attach('file', 'test/private-api/fixtures/test.zip')
           .set('HedgeDoc-Note', 'i_dont_exist')
           .expect(400);
@@ -92,7 +92,7 @@ describe('Media', () => {
           mode: '444',
         });
         await agent
-          .post('/media')
+          .post('/api/private/media')
           .attach('file', 'test/private-api/fixtures/test.png')
           .set('HedgeDoc-Note', 'test_upload_media')
           .expect('Content-Type', /json/)
